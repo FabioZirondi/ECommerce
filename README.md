@@ -1,6 +1,7 @@
 # ECommerce
 
-**Projeto - Iniciação.**
+**Projeto - Iniciação.**  
+Gerência e Projetos
 
 Marketplace acadêmico (modular monolith) em ASP.NET Core 8 + MongoDB.
 Três contextos: Users, Products (anúncios) e Orders.
