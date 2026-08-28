@@ -1,0 +1,28 @@
+@ECommerce.API_HostAddress = http://localhost:5264
+
+### Register
+POST {{ECommerce.API_HostAddress}}/api/auth/register
+Content-Type: application/json
+
+{
+  "name": "Ana Silva",
+  "email": "ana@email.com",
+  "password": "senha1234",
+  "asSeller": true
+}
+
+### Login
+POST {{ECommerce.API_HostAddress}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "ana@email.com",
+  "password": "senha1234"
+}
+
+### Me
+GET {{ECommerce.API_HostAddress}}/api/users/me
+Authorization: Bearer {{token}}
+
+### Health
+GET {{ECommerce.API_HostAddress}}/health
