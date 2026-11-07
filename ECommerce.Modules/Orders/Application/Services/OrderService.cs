@@ -16,12 +16,6 @@ public interface IOrderService
     Task<Result<IReadOnlyList<OrderResponse>>> CheckoutAsync(string buyerId, CancellationToken cancellationToken = default);
 }
 
-public interface ICartService
-{
-    Task<Result<Cart>> GetAsync(string userId, CancellationToken cancellationToken = default);
-    Task<Result<Cart>> AddItemAsync(string userId, AddCartItemRequest request, CancellationToken cancellationToken = default);
-}
-
 public sealed class OrderService : IOrderService
 {
     private readonly IOrderRepository _orders;
@@ -143,26 +137,35 @@ public sealed class OrderService : IOrderService
             });
         }
 
-        foreach (var (item, product) in lines)
+        var reserved = new List<(string ProductId, int Quantity)>();
+        try
         {
-            product.AvailableUnits -= item.Quantity;
-            if (product.AvailableUnits <= 0)
+            foreach (var (item, product) in lines)
             {
-                product.AvailableUnits = 0;
-                product.Status = ProductStatus.Sold;
+                if (!await _products.TryDecrementUnitsAsync(product.Id, item.Quantity, cancellationToken))
+                {
+                    await RestoreReservedAsync(reserved, cancellationToken);
+                    return Result<IReadOnlyList<OrderResponse>>.Failure(
+                        $"O anúncio “{product.Title}” não tem unidades suficientes.");
+                }
+
+                reserved.Add((product.Id, item.Quantity));
             }
 
-            await _products.ReplaceAsync(product, cancellationToken);
-        }
+            foreach (var order in created)
+            {
+                await _orders.AddAsync(order, cancellationToken);
+            }
 
-        foreach (var order in created)
+            cart.Items.Clear();
+            cart.UpdatedAt = DateTime.UtcNow;
+            await _carts.UpsertAsync(cart, cancellationToken);
+        }
+        catch
         {
-            await _orders.AddAsync(order, cancellationToken);
+            await RestoreReservedAsync(reserved, cancellationToken);
+            throw;
         }
-
-        cart.Items.Clear();
-        cart.UpdatedAt = DateTime.UtcNow;
-        await _carts.UpsertAsync(cart, cancellationToken);
 
         var mapped = new List<OrderResponse>();
         foreach (var order in created)
@@ -171,6 +174,16 @@ public sealed class OrderService : IOrderService
         }
 
         return Result<IReadOnlyList<OrderResponse>>.Success(mapped, 201);
+    }
+
+    private async Task RestoreReservedAsync(
+        IReadOnlyList<(string ProductId, int Quantity)> reserved,
+        CancellationToken cancellationToken)
+    {
+        foreach (var (productId, quantity) in reserved)
+        {
+            await _products.RestoreUnitsAsync(productId, quantity, cancellationToken);
+        }
     }
 
     private async Task<OrderResponse> ToResponseAsync(Order order, CancellationToken cancellationToken)
@@ -212,74 +225,4 @@ public sealed class OrderService : IOrderService
 
     private static string CoverImage(Product? product)
         => product?.Images.FirstOrDefault(url => !string.IsNullOrWhiteSpace(url)) ?? string.Empty;
-}
-
-public sealed class CartService : ICartService
-{
-    private readonly ICartRepository _carts;
-    private readonly IProductCatalog _catalog;
-
-    public CartService(ICartRepository carts, IProductCatalog catalog)
-    {
-        _carts = carts;
-        _catalog = catalog;
-    }
-
-    public async Task<Result<Cart>> GetAsync(string userId, CancellationToken cancellationToken = default)
-    {
-        var cart = await _carts.GetByUserIdAsync(userId, cancellationToken)
-                   ?? new Cart { UserId = userId };
-        return Result<Cart>.Success(cart);
-    }
-
-    public async Task<Result<Cart>> AddItemAsync(
-        string userId,
-        AddCartItemRequest request,
-        CancellationToken cancellationToken = default)
-    {
-        if (string.IsNullOrWhiteSpace(request.ProductId) || request.Quantity < 1)
-        {
-            return Result<Cart>.Failure("Item inválido.");
-        }
-
-        var product = await _catalog.GetByIdAsync(request.ProductId, cancellationToken);
-        if (product is null || product.Status != ProductStatus.Active || product.AvailableUnits < 1)
-        {
-            return Result<Cart>.Failure("Este anúncio não está disponível.");
-        }
-
-        if (string.Equals(product.SellerId, userId, StringComparison.Ordinal))
-        {
-            return Result<Cart>.Failure("Você não pode comprar o próprio anúncio.");
-        }
-
-        var cart = await _carts.GetByUserIdAsync(userId, cancellationToken)
-                   ?? new Cart { UserId = userId };
-
-        var existing = cart.Items.FirstOrDefault(item => item.ProductId == request.ProductId);
-        var desired = (existing?.Quantity ?? 0) + request.Quantity;
-        if (desired > product.AvailableUnits)
-        {
-            return Result<Cart>.Failure(
-                $"Só há {product.AvailableUnits} unidade(s) disponível(is).");
-        }
-
-        if (existing is null)
-        {
-            cart.Items.Add(new CartItem
-            {
-                ProductId = request.ProductId,
-                SellerId = product.SellerId,
-                Quantity = request.Quantity
-            });
-        }
-        else
-        {
-            existing.Quantity += request.Quantity;
-        }
-
-        cart.UpdatedAt = DateTime.UtcNow;
-        await _carts.UpsertAsync(cart, cancellationToken);
-        return Result<Cart>.Success(cart);
-    }
 }

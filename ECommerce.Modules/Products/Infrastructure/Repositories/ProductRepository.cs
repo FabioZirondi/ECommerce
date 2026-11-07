@@ -42,6 +42,59 @@ public sealed class ProductRepository : IProductRepository, IProductCatalog
     public Task ReplaceAsync(Product product, CancellationToken cancellationToken = default)
         => _collection.ReplaceOneAsync(item => item.Id == product.Id, product, cancellationToken: cancellationToken);
 
+    public async Task<bool> TryDecrementUnitsAsync(string id, int quantity, CancellationToken cancellationToken = default)
+    {
+        if (quantity < 1)
+        {
+            return false;
+        }
+
+        var filter = Builders<Product>.Filter.And(
+            Builders<Product>.Filter.Eq(product => product.Id, id),
+            Builders<Product>.Filter.Eq(product => product.Status, ProductStatus.Active),
+            Builders<Product>.Filter.Gte(product => product.AvailableUnits, quantity));
+
+        var updated = await _collection.FindOneAndUpdateAsync(
+            filter,
+            Builders<Product>.Update.Inc(product => product.AvailableUnits, -quantity),
+            new FindOneAndUpdateOptions<Product> { ReturnDocument = ReturnDocument.After },
+            cancellationToken);
+
+        if (updated is null)
+        {
+            return false;
+        }
+
+        if (updated.AvailableUnits <= 0)
+        {
+            updated.AvailableUnits = 0;
+            updated.Status = ProductStatus.Sold;
+            await ReplaceAsync(updated, cancellationToken);
+        }
+
+        return true;
+    }
+
+    public async Task RestoreUnitsAsync(string id, int quantity, CancellationToken cancellationToken = default)
+    {
+        if (quantity < 1)
+        {
+            return;
+        }
+
+        var updated = await _collection.FindOneAndUpdateAsync(
+            Builders<Product>.Filter.Eq(product => product.Id, id),
+            Builders<Product>.Update.Inc(product => product.AvailableUnits, quantity),
+            new FindOneAndUpdateOptions<Product> { ReturnDocument = ReturnDocument.After },
+            cancellationToken);
+
+        if (updated is { Status: ProductStatus.Sold, AvailableUnits: > 0 })
+        {
+            updated.Status = ProductStatus.Active;
+            await ReplaceAsync(updated, cancellationToken);
+        }
+    }
+
     public async Task<bool> IsAvailableAsync(string id, CancellationToken cancellationToken = default)
     {
         var product = await GetByIdAsync(id, cancellationToken);

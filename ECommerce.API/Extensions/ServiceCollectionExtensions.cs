@@ -132,9 +132,9 @@ public static class ServiceCollectionExtensions
         {
             options.SwaggerDoc("v1", new OpenApiInfo
             {
-                Title = "ECommerce API",
+                Title = "InovaTech API",
                 Version = "v1",
-                Description = "Marketplace acadêmico — identidade, catálogo e pedidos."
+                Description = "Marketplace acadêmico ECommerce — identidade, catálogo, carrinho e pedidos."
             });
 
             var scheme = new OpenApiSecurityScheme

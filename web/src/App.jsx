@@ -28,7 +28,7 @@ export default function App() {
         <div className="topbar-main">
           <Link to="/" className="brand">
             <span className="brand-mark" aria-hidden="true" />
-            ECommerce
+            InovaTech
           </Link>
           <form className="search" onSubmit={onSearch}>
             <input
@@ -168,6 +168,14 @@ function HomePage() {
   const [data, setData] = useState(null);
   const [categories, setCategories] = useState([]);
   const [error, setError] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(() => window.matchMedia("(min-width: 841px)").matches);
+
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 841px)");
+    const sync = () => setFiltersOpen(media.matches);
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
 
   useEffect(() => {
     const url = selected ? `/api/products?category=${encodeURIComponent(selected)}` : "/api/products";
@@ -205,18 +213,24 @@ function HomePage() {
   return (
     <div className="catalog">
       <aside className="filters">
-        <p className="filters-title">Categorias</p>
-        <div className="filters-scroll">
-          <Link className={`filter-link ${selected ? "" : "active"}`} to={catalogHref("", term)}>
-            Todas
-          </Link>
-          <CategoryTree
-            categories={categories}
-            parentId={null}
-            selected={selected}
-            term={term}
-          />
-        </div>
+        <details
+          className="filters-panel"
+          open={filtersOpen}
+          onToggle={(event) => setFiltersOpen(event.currentTarget.open)}
+        >
+          <summary className="filters-title">Categorias</summary>
+          <div className="filters-scroll">
+            <Link className={`filter-link ${selected ? "" : "active"}`} to={catalogHref("", term)}>
+              Todas
+            </Link>
+            <CategoryTree
+              categories={categories}
+              parentId={null}
+              selected={selected}
+              term={term}
+            />
+          </div>
+        </details>
       </aside>
       <section>
         <nav className="crumbs" aria-label="Caminho">
@@ -335,12 +349,24 @@ function ExpandableText({ text }) {
   );
 }
 
+function QtyStepper({ value, min = 1, max = 1, onChange, disabled }) {
+  const current = Math.min(Math.max(Number(value) || min, min), Math.max(min, max));
+  return (
+    <div className="qty-stepper">
+      <button type="button" aria-label="Diminuir quantidade" disabled={disabled || current <= min} onClick={() => onChange(current - 1)}>-</button>
+      <span aria-live="polite">{current}</span>
+      <button type="button" aria-label="Aumentar quantidade" disabled={disabled || current >= max} onClick={() => onChange(current + 1)}>+</button>
+    </div>
+  );
+}
+
 function ProductPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const auth = useAuth();
   const [product, setProduct] = useState(null);
   const [photo, setPhoto] = useState(0);
+  const [qty, setQty] = useState(1);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
 
@@ -349,6 +375,7 @@ function ProductPage() {
       .then((data) => {
         setProduct(data);
         setPhoto(0);
+        setQty(1);
       })
       .catch((err) => setError(err.message));
   }, [id]);
@@ -362,9 +389,9 @@ function ProductPage() {
     try {
       await api("/api/cart/items", {
         method: "POST",
-        body: JSON.stringify({ productId: product.id, quantity: 1 })
+        body: JSON.stringify({ productId: product.id, quantity: qty })
       });
-      setStatus("Adicionado ao carrinho.");
+      setStatus(qty > 1 ? `${qty} unidades adicionadas ao carrinho.` : "Adicionado ao carrinho.");
     } catch (err) {
       setStatus(err.message);
     }
@@ -432,6 +459,17 @@ function ProductPage() {
                 ? `Últimas unidades · ${product.availableUnits} disponível(is)`
                 : `${product.availableUnits} unidade(s) disponível(is)`}
             </p>
+          )}
+          {canBuy && (
+            <div className="buy-qty">
+              <span>Quantidade</span>
+              <QtyStepper
+                value={qty}
+                min={1}
+                max={product.availableUnits}
+                onChange={setQty}
+              />
+            </div>
           )}
           <button type="button" className="btn wide" onClick={addToCart} disabled={!canBuy}>
             {ownListing
@@ -1041,28 +1079,47 @@ function CartPage() {
   const navigate = useNavigate();
   const [cart, setCart] = useState(null);
   const [error, setError] = useState("");
-  const [status, setStatus] = useState("");
+  const [busy, setBusy] = useState("");
   const [checkingOut, setCheckingOut] = useState(false);
+
+  async function hydrate(data) {
+    const items = await Promise.all((data.items ?? []).map(async (item) => {
+      try {
+        const product = await api(`/api/products/${item.productId}`);
+        return { ...item, product };
+      } catch {
+        return { ...item, product: null };
+      }
+    }));
+    setCart({ ...data, items });
+  }
 
   useEffect(() => {
     api("/api/cart")
-      .then(async (data) => {
-        const items = await Promise.all((data.items ?? []).map(async (item) => {
-          try {
-            const product = await api(`/api/products/${item.productId}`);
-            return { ...item, product };
-          } catch {
-            return { ...item, product: null };
-          }
-        }));
-        setCart({ ...data, items });
-      })
+      .then(hydrate)
       .catch((err) => setError(err.message));
   }, []);
 
+  async function changeQty(productId, quantity) {
+    setBusy(productId);
+    setError("");
+    try {
+      const data = quantity < 1
+        ? await api(`/api/cart/items/${productId}`, { method: "DELETE" })
+        : await api(`/api/cart/items/${productId}`, {
+            method: "PATCH",
+            body: JSON.stringify({ quantity })
+          });
+      await hydrate(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy("");
+    }
+  }
+
   async function checkout() {
     setError("");
-    setStatus("");
     setCheckingOut(true);
     try {
       await api("/api/orders", { method: "POST" });
@@ -1087,12 +1144,11 @@ function CartPage() {
         <Link to="/" className="ghost">Continuar comprando</Link>
       </div>
       {error && <p className="error">{error}</p>}
-      {status && <p className="ok">{status}</p>}
       {items.length ? (
         <>
           <ul className="list">
             {items.map((item) => (
-              <li key={item.productId}>
+              <li key={item.productId} className="cart-line">
                 {item.product && <img className="cart-thumb" src={coverUrl(item.product)} alt="" />}
                 <div>
                   <strong>{item.product?.title ?? "Anúncio"}</strong>
@@ -1101,13 +1157,29 @@ function CartPage() {
                     {isLastUnits(item.product?.availableUnits) ? " · Últimas unidades" : ""}
                   </p>
                 </div>
-                <span className="qty">Qtd. {item.quantity}</span>
+                <div className="cart-line-actions">
+                  <QtyStepper
+                    value={item.quantity}
+                    min={1}
+                    max={item.product?.availableUnits ?? item.quantity}
+                    disabled={busy === item.productId || checkingOut}
+                    onChange={(quantity) => changeQty(item.productId, quantity)}
+                  />
+                  <button
+                    type="button"
+                    className="linkish"
+                    disabled={busy === item.productId || checkingOut}
+                    onClick={() => changeQty(item.productId, 0)}
+                  >
+                    Remover
+                  </button>
+                </div>
               </li>
             ))}
           </ul>
           <div className="cart-summary">
             <p className="price">{money(total)}</p>
-            <button type="button" className="btn" onClick={checkout} disabled={checkingOut}>
+            <button type="button" className="btn" onClick={checkout} disabled={checkingOut || Boolean(busy)}>
               {checkingOut ? "Finalizando..." : "Finalizar compra"}
             </button>
           </div>

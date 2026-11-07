@@ -19,4 +19,6 @@ public interface IProductRepository
         CancellationToken cancellationToken = default);
     Task AddAsync(Product product, CancellationToken cancellationToken = default);
     Task ReplaceAsync(Product product, CancellationToken cancellationToken = default);
+    Task<bool> TryDecrementUnitsAsync(string id, int quantity, CancellationToken cancellationToken = default);
+    Task RestoreUnitsAsync(string id, int quantity, CancellationToken cancellationToken = default);
 }

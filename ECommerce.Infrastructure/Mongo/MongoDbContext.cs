@@ -34,5 +34,39 @@ public sealed class MongoDbContext
             new CreateIndexOptions { Unique = true, Name = "ux_users_email" });
 
         await users.Indexes.CreateOneAsync(emailIndex, cancellationToken: cancellationToken);
+
+        var products = Database.GetCollection<BsonDocument>("products");
+        await products.Indexes.CreateManyAsync(
+            [
+                new CreateIndexModel<BsonDocument>(
+                    Builders<BsonDocument>.IndexKeys.Ascending("sellerId"),
+                    new CreateIndexOptions { Name = "ix_products_sellerId" }),
+                new CreateIndexModel<BsonDocument>(
+                    Builders<BsonDocument>.IndexKeys
+                        .Ascending("status")
+                        .Ascending("categoryId")
+                        .Descending("createdAt"),
+                    new CreateIndexOptions { Name = "ix_products_catalog" })
+            ],
+            cancellationToken: cancellationToken);
+
+        var orders = Database.GetCollection<BsonDocument>("orders");
+        await orders.Indexes.CreateManyAsync(
+            [
+                new CreateIndexModel<BsonDocument>(
+                    Builders<BsonDocument>.IndexKeys.Ascending("buyerId").Descending("createdAt"),
+                    new CreateIndexOptions { Name = "ix_orders_buyerId" }),
+                new CreateIndexModel<BsonDocument>(
+                    Builders<BsonDocument>.IndexKeys.Ascending("sellerId").Descending("createdAt"),
+                    new CreateIndexOptions { Name = "ix_orders_sellerId" })
+            ],
+            cancellationToken: cancellationToken);
+
+        var carts = Database.GetCollection<BsonDocument>("carts");
+        await carts.Indexes.CreateOneAsync(
+            new CreateIndexModel<BsonDocument>(
+                Builders<BsonDocument>.IndexKeys.Ascending("userId"),
+                new CreateIndexOptions { Unique = true, Name = "ux_carts_userId" }),
+            cancellationToken: cancellationToken);
     }
 }

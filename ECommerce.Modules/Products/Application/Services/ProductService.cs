@@ -44,7 +44,7 @@ public sealed class ProductService : IProductService
         CancellationToken cancellationToken = default)
     {
         page = page < 1 ? 1 : page;
-        pageSize = pageSize is < 1 or > 50 ? 20 : pageSize;
+        pageSize = Math.Clamp(pageSize, 1, 50);
 
         var categoryIds = await _categoryService.ExpandIdsAsync(category, cancellationToken);
         var tree = await _categories.ListAsync(cancellationToken);
@@ -70,7 +70,7 @@ public sealed class ProductService : IProductService
         CancellationToken cancellationToken = default)
     {
         page = page < 1 ? 1 : page;
-        pageSize = pageSize is < 1 or > 50 ? 20 : pageSize;
+        pageSize = Math.Clamp(pageSize, 1, 50);
 
         var tree = await _categories.ListAsync(cancellationToken);
         var total = await _products.CountAsync(sellerId: sellerId, activeOnly: false, cancellationToken: cancellationToken);
@@ -115,6 +115,14 @@ public sealed class ProductService : IProductService
             return Result<ProductResponse>.Failure("Dados inválidos.", 400, ToErrors(validation));
         }
 
+        var categoryId = request.CategoryId.Trim();
+        var category = await _categories.GetByIdAsync(categoryId, cancellationToken)
+                       ?? await _categories.GetBySlugAsync(categoryId, cancellationToken);
+        if (category is null)
+        {
+            return Result<ProductResponse>.Failure("Categoria não encontrada.", 400);
+        }
+
         if (!Enum.TryParse<ProductCondition>(request.Condition, ignoreCase: true, out var condition))
         {
             condition = ProductCondition.Used;
@@ -127,7 +135,7 @@ public sealed class ProductService : IProductService
             Title = request.Title.Trim(),
             Description = request.Description.Trim(),
             Price = request.Price,
-            CategoryId = request.CategoryId,
+            CategoryId = category.Id,
             Condition = condition,
             City = request.City.Trim(),
             State = request.State.Trim().ToUpperInvariant(),

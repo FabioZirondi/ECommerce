@@ -1,5 +1,4 @@
 using ECommerce.API.Extensions;
-using ECommerce.Modules.Orders.Application.DTOs;
 using ECommerce.Modules.Orders.Application.Services;
 using ECommerce.Shared.Extensions;
 using Microsoft.AspNetCore.Authorization;
@@ -14,12 +13,10 @@ namespace ECommerce.API.Controllers;
 public sealed class OrdersController : ControllerBase
 {
     private readonly IOrderService _orders;
-    private readonly ICartService _carts;
 
-    public OrdersController(IOrderService orders, ICartService carts)
+    public OrdersController(IOrderService orders)
     {
         _orders = orders;
-        _carts = carts;
     }
 
     [HttpGet]
@@ -48,20 +45,6 @@ public sealed class OrdersController : ControllerBase
     public async Task<IActionResult> GetById(string id, CancellationToken cancellationToken)
     {
         var result = await _orders.GetByIdAsync(id, User.GetUserId(), cancellationToken);
-        return result.ToActionResult();
-    }
-
-    [HttpGet("/api/cart")]
-    public async Task<IActionResult> GetCart(CancellationToken cancellationToken)
-    {
-        var result = await _carts.GetAsync(User.GetUserId(), cancellationToken);
-        return result.ToActionResult();
-    }
-
-    [HttpPost("/api/cart/items")]
-    public async Task<IActionResult> AddCartItem([FromBody] AddCartItemRequest request, CancellationToken cancellationToken)
-    {
-        var result = await _carts.AddItemAsync(User.GetUserId(), request, cancellationToken);
         return result.ToActionResult();
     }
 }
