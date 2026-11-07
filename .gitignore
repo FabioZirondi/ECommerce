@@ -8,6 +8,10 @@
 
 # Local Mongo data (embedded development server)
 .mongo-data/
+.mongo-data.bak-*/
+
+# Pacote gerado por scripts/exportar-ambiente.ps1 (não versionar cadastros)
+portabilidade/
 
 # Uploaded product images
 ECommerce.API/wwwroot/uploads/**

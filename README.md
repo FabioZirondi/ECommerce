@@ -22,6 +22,26 @@ npm run dev
 
 `docker compose up -d` só entra se você quiser um Mongo externo no lugar do processo embutido.
 
+## Levar para outro PC (sem perder cadastros)
+
+Contas, anúncios, pedidos e fotos **não vão no Git**. Ficam em `.mongo-data/` e em `ECommerce.API/wwwroot/uploads/`.
+
+No PC de origem, **pare a API** e rode:
+
+```powershell
+powershell -File scripts/exportar-ambiente.ps1
+```
+
+Leve o código **e** o arquivo `portabilidade/inovatech-dados.zip`. No PC de destino (Windows, .NET 8 + Node 18+), com a API parada:
+
+```powershell
+powershell -File scripts/importar-ambiente.ps1
+```
+
+Suba API e frontend de novo e entre com o mesmo e-mail/senha. O login do browser antigo não transfere.
+
+O contexto completo do sistema (arquitetura, fluxo, dados) está em `AGENTS.md` — o Cursor no outro PC usa isso automaticamente.
+
 ## Fluxo
 
 1. `POST /api/auth/register` (roles Buyer e, se `asSeller`, também Seller)

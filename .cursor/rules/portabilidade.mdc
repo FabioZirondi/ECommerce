@@ -1,0 +1,17 @@
+---
+description: Como levar banco e fotos para outro PC sem perder cadastros
+alwaysApply: true
+---
+
+# Portabilidade dos dados
+
+`.mongo-data/` (Mongo) e `ECommerce.API/wwwroot/uploads/` (fotos) estão no `.gitignore`. `git clone` sobe o código vazio.
+
+Para outro Windows, **API parada** (nada na porta 27017):
+
+1. Origem: `powershell -File scripts/exportar-ambiente.ps1`
+2. Levar o código e `portabilidade/inovatech-dados.zip`
+3. Destino: `powershell -File scripts/importar-ambiente.ps1`
+4. Subir API + `npm run dev` e fazer login de novo (localStorage não viaja)
+
+Não copiar `.mongo-data` com o Mongo ligado — corrompe WiredTiger. O script recusa se 27017 estiver em uso. Sessão JWT do browser antigo não transfere; e-mail/senha sim, estão no banco.

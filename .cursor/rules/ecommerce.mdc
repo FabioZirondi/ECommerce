@@ -1,0 +1,15 @@
+---
+description: Contexto do marketplace acadêmico InovaTech/ECommerce
+alwaysApply: true
+---
+
+# InovaTech / ECommerce
+
+Monólito modular acadêmico (ASP.NET Core 8 + Mongo local + React). Uma conta compra e vende. Sem microserviços, MediatR ou fila. Fale em português. Git só quando o usuário pedir.
+
+- API `ECommerce.API` em `localhost:5264`; SPA `web` em `localhost:5173`.
+- Mongo embutido (EphemeralMongo) em `127.0.0.1:27017`, dados em `.mongo-data`, banco `ecommerce`.
+- Módulos: Users, Products, Orders. Checkout síncrono (Paid na hora).
+- Vitrine: `Active` e `availableUnits > 0`. Zero unidades → `Sold` e sai da vitrine.
+- Carrinho: `CartController` + `CartResponse`. Não comprar o próprio anúncio. Estoque atômico no checkout.
+- Cadastros **não** estão no Git. Ver regra de portabilidade e `AGENTS.md`.
