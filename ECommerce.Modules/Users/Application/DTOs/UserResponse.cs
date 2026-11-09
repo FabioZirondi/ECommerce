@@ -9,15 +9,25 @@ public sealed class UserResponse
     public string Email { get; init; } = string.Empty;
     public IReadOnlyList<string> Roles { get; init; } = [];
     public string Status { get; init; } = string.Empty;
+    public string City { get; init; } = string.Empty;
+    public string State { get; init; } = string.Empty;
+    public string ZipCode { get; init; } = string.Empty;
     public DateTime CreatedAt { get; init; }
 
-    public static UserResponse From(User user) => new()
+    public static UserResponse From(User user)
     {
-        Id = user.Id,
-        Name = user.Name,
-        Email = user.Email,
-        Roles = user.Roles,
-        Status = user.Status.ToString(),
-        CreatedAt = user.CreatedAt
-    };
+        var address = user.Addresses.FirstOrDefault();
+        return new()
+        {
+            Id = user.Id,
+            Name = user.Name,
+            Email = user.Email,
+            Roles = user.Roles,
+            Status = user.Status.ToString(),
+            City = address?.City?.Trim() ?? string.Empty,
+            State = address?.State?.Trim() ?? string.Empty,
+            ZipCode = address?.ZipCode?.Trim() ?? string.Empty,
+            CreatedAt = user.CreatedAt
+        };
+    }
 }

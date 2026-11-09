@@ -17,5 +17,10 @@ public sealed class CreateUserValidator : AbstractValidator<DTOs.CreateUserReque
         RuleFor(x => x.Password)
             .NotEmpty().WithMessage("Senha é obrigatória.")
             .MinimumLength(8).WithMessage("Senha deve ter no mínimo 8 caracteres.");
+
+        RuleFor(x => x.ZipCode)
+            .Must(zip => UpdateAddressValidator.Digits(zip).Length == 8)
+            .When(x => !x.AsSeller)
+            .WithMessage("Informe um CEP com 8 dígitos.");
     }
 }

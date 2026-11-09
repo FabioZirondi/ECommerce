@@ -23,9 +23,12 @@ public sealed class ProductsController : ControllerBase
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
         [FromQuery] string? category = null,
+        [FromQuery] string? q = null,
+        [FromQuery] string? nearCity = null,
+        [FromQuery] string? nearState = null,
         CancellationToken cancellationToken = default)
     {
-        var result = await _products.ListAsync(page, pageSize, category, cancellationToken);
+        var result = await _products.ListAsync(page, pageSize, category, q, nearCity, nearState, cancellationToken);
         return result.ToActionResult();
     }
 
@@ -37,6 +40,17 @@ public sealed class ProductsController : ControllerBase
         CancellationToken cancellationToken = default)
     {
         var result = await _products.ListMineAsync(User.GetUserId(), page, pageSize, cancellationToken);
+        return result.ToActionResult();
+    }
+
+    [HttpGet("suggest")]
+    public async Task<IActionResult> Suggest(
+        [FromQuery] string? q = null,
+        [FromQuery] string? nearCity = null,
+        [FromQuery] string? nearState = null,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _products.SuggestAsync(q, nearCity, nearState, cancellationToken);
         return result.ToActionResult();
     }
 

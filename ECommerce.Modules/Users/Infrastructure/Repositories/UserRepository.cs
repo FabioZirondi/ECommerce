@@ -21,4 +21,7 @@ public sealed class UserRepository : IUserRepository
 
     public Task AddAsync(User user, CancellationToken cancellationToken = default)
         => _collection.InsertOneAsync(user, cancellationToken: cancellationToken);
+
+    public Task ReplaceAsync(User user, CancellationToken cancellationToken = default)
+        => _collection.ReplaceOneAsync(item => item.Id == user.Id, user, cancellationToken: cancellationToken);
 }

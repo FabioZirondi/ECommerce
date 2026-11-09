@@ -12,7 +12,15 @@ export function getStoredUser() {
 
 export function storeSession(auth) {
   localStorage.setItem(TOKEN_KEY, auth.accessToken);
-  localStorage.setItem(USER_KEY, JSON.stringify(auth.user));
+  storeUser(auth.user);
+}
+
+export function storeUser(user) {
+  if (!user) {
+    localStorage.removeItem(USER_KEY);
+    return;
+  }
+  localStorage.setItem(USER_KEY, JSON.stringify(user));
 }
 
 export function clearSession() {
@@ -39,7 +47,10 @@ export async function api(path, options = {}) {
       headers,
       signal: fetchOptions.signal ?? AbortSignal.timeout(timeoutMs)
     });
-  } catch {
+  } catch (error) {
+    if (error?.name === "AbortError" || error?.name === "TimeoutError") {
+      throw error;
+    }
     throw new Error("Não foi possível conectar à API. Suba o backend em localhost:5264.");
   }
 

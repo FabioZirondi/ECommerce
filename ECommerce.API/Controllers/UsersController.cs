@@ -1,4 +1,5 @@
 using ECommerce.API.Extensions;
+using ECommerce.Modules.Users.Application.DTOs;
 using ECommerce.Modules.Users.Application.Services;
 using ECommerce.Shared.Extensions;
 using Microsoft.AspNetCore.Authorization;
@@ -22,6 +23,16 @@ public sealed class UsersController : ControllerBase
     public async Task<IActionResult> Me(CancellationToken cancellationToken)
     {
         var result = await _users.GetByIdAsync(User.GetUserId(), cancellationToken);
+        return result.ToActionResult();
+    }
+
+    [Authorize]
+    [HttpPatch("me/address")]
+    public async Task<IActionResult> UpdateAddress(
+        [FromBody] UpdateAddressRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _users.UpdateDeliveryAddressAsync(User.GetUserId(), request, cancellationToken);
         return result.ToActionResult();
     }
 }

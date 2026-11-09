@@ -1,26 +1,22 @@
 import { Link, NavLink, Navigate, Route, Routes, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import QRCode from "qrcode";
 import { api, coverUrl, money, parseMoney, uploadImage } from "./api.js";
-import { catalogHref, childrenOf, labeledOptions, pathOf, BRAZIL_STATES, formatAddress, formatCep, cepDigits, isLastUnits, listingStatus, orderStatusLabel } from "./catalog.js";
+import { catalogHref, childrenOf, labeledOptions, pathOf, BRAZIL_STATES, formatAddress, formatCep, cepDigits, isLastUnits, listingStatus, orderStatusLabel, paymentMethodLabel, buildPixCopiaECola } from "./catalog.js";
+import { resolveNear } from "./search.js";
+import { SearchBox } from "./search.jsx";
+import { DeliveryCepField, DeliveryEta } from "./cep.jsx";
 import { useAuth } from "./auth.jsx";
 
 export default function App() {
   const auth = useAuth();
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
   const [apiUp, setApiUp] = useState(null);
-  const [query, setQuery] = useState(searchParams.get("q") ?? "");
 
   useEffect(() => {
     fetch("/health")
       .then((response) => setApiUp(response.ok))
       .catch(() => setApiUp(false));
   }, []);
-
-  function onSearch(event) {
-    event.preventDefault();
-    navigate(catalogHref(searchParams.get("c"), query.trim()));
-  }
 
   return (
     <div className="shell">
@@ -30,15 +26,7 @@ export default function App() {
             <span className="brand-mark" aria-hidden="true" />
             InovaTech
           </Link>
-          <form className="search" onSubmit={onSearch}>
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Buscar anúncios, cidade ou vendedor"
-              aria-label="Buscar anúncios"
-            />
-            <button type="submit">Buscar</button>
-          </form>
+          <SearchBox />
           <div className="session">
             {auth.user ? (
               <>
@@ -55,9 +43,9 @@ export default function App() {
         </div>
         <nav className="nav">
           <NavLink to="/" end>Anúncios</NavLink>
-          {auth.user && <NavLink to="/listings">Meus anúncios</NavLink>}
-          {auth.user && <NavLink to="/sales">Vendas</NavLink>}
-          <NavLink to="/sell">Anunciar</NavLink>
+          {auth.isSeller && <NavLink to="/listings">Meus anúncios</NavLink>}
+          {auth.isSeller && <NavLink to="/sales">Vendas</NavLink>}
+          {auth.isSeller && <NavLink to="/sell">Anunciar</NavLink>}
           <NavLink to="/cart">Carrinho</NavLink>
           <NavLink to="/orders">Pedidos</NavLink>
         </nav>
@@ -75,16 +63,31 @@ export default function App() {
           <Route path="/products/:id" element={<ProductPage />} />
           <Route path="/login" element={<Guest><LoginPage /></Guest>} />
           <Route path="/register" element={<Guest><RegisterPage /></Guest>} />
-          <Route path="/sell" element={<Private><SellPage /></Private>} />
-          <Route path="/listings" element={<Private><ListingsPage /></Private>} />
+          <Route path="/sell" element={<SellerOnly><SellPage /></SellerOnly>} />
+          <Route path="/listings" element={<SellerOnly><ListingsPage /></SellerOnly>} />
           <Route path="/cart" element={<Private><CartPage /></Private>} />
           <Route path="/orders" element={<Private><OrdersPage /></Private>} />
-          <Route path="/sales" element={<Private><SalesPage /></Private>} />
+          <Route path="/sales" element={<SellerOnly><SalesPage /></SellerOnly>} />
         </Routes>
       </main>
 
       <footer className="footer">
-        Marketplace acadêmico · compre e venda com a mesma conta
+        <p className="footer-brand">InovaTech E-commerce</p>
+        <p className="footer-label">Desenvolvido por</p>
+        <ul className="footer-credits">
+          <li>
+            <strong>Fábio Gabriel Zirondi Bernardelli</strong>
+            <span>Desenvolvimento front-end</span>
+          </li>
+          <li>
+            <strong>Guilherme Rocha da Silva</strong>
+            <span>Gerenciamento, desenvolvimento e testes</span>
+          </li>
+          <li>
+            <strong>Gustavo Rocha Freire</strong>
+            <span>Desenvolvimento back-end e persistência</span>
+          </li>
+        </ul>
       </footer>
     </div>
   );
@@ -94,6 +97,17 @@ function Private({ children }) {
   const auth = useAuth();
   if (!auth.isAuthenticated) {
     return <Navigate to="/login" replace />;
+  }
+  return children;
+}
+
+function SellerOnly({ children }) {
+  const auth = useAuth();
+  if (!auth.isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+  if (!auth.isSeller) {
+    return <Navigate to="/" replace />;
   }
   return children;
 }
@@ -162,13 +176,15 @@ function AuthTabs({ current }) {
 }
 
 function HomePage() {
+  const auth = useAuth();
   const [searchParams] = useSearchParams();
-  const term = (searchParams.get("q") ?? "").trim().toLowerCase();
+  const term = (searchParams.get("q") ?? "").trim();
   const selected = searchParams.get("c") ?? "";
   const [data, setData] = useState(null);
   const [categories, setCategories] = useState([]);
   const [error, setError] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(() => window.matchMedia("(min-width: 841px)").matches);
+  const near = resolveNear(auth.user);
 
   useEffect(() => {
     const media = window.matchMedia("(min-width: 841px)");
@@ -178,25 +194,21 @@ function HomePage() {
   }, []);
 
   useEffect(() => {
-    const url = selected ? `/api/products?category=${encodeURIComponent(selected)}` : "/api/products";
-    Promise.all([api(url), api("/api/categories")])
+    const params = new URLSearchParams();
+    if (selected) params.set("category", selected);
+    if (term) params.set("q", term);
+    if (near?.city) params.set("nearCity", near.city);
+    if (near?.state) params.set("nearState", near.state);
+    const query = params.toString();
+    Promise.all([api(query ? `/api/products?${query}` : "/api/products"), api("/api/categories")])
       .then(([products, catalog]) => {
         setData(products);
         setCategories(catalog.items ?? []);
       })
       .catch((err) => setError(err.message));
-  }, [selected]);
+  }, [selected, term, near?.city, near?.state]);
 
-  const items = useMemo(() => {
-    const list = data?.items ?? [];
-    if (!term) return list;
-    return list.filter((product) =>
-      [product.title, product.description, product.city, product.sellerName, product.categoryName]
-        .join(" ")
-        .toLowerCase()
-        .includes(term)
-    );
-  }, [data, term]);
+  const items = data?.items ?? [];
 
   const current = categories.find((category) => category.slug === selected || category.id === selected);
   const crumbs = current ? pathOf(categories, current.id) : [];
@@ -248,12 +260,12 @@ function HomePage() {
             <h1>{heading}</h1>
             <p className="muted">{items.length} anúncio(s) {term || selected ? "nesta seleção" : "publicados"}</p>
           </div>
-          <Link to="/sell" className="btn">Vender agora</Link>
+          {auth.isSeller && <Link to="/sell" className="btn">Vender agora</Link>}
         </div>
         {items.length === 0 ? (
           <Notice title={term || selected ? "Nada encontrado" : "Nenhum anúncio ainda"}>
             {term || selected
-              ? "Tente outra categoria ou limpe a busca."
+              ? "Tente outro termo, uma cidade próxima ou limpe a busca."
               : "Crie uma conta e publique o primeiro produto para testar o catálogo."}
           </Notice>
         ) : (
@@ -481,6 +493,7 @@ function ProductPage() {
                   : "Adicionar ao carrinho"}
           </button>
           {status && <p className="ok">{status}</p>}
+          <DeliveryEta product={product} />
         </div>
       </div>
       <section className="description">
@@ -592,7 +605,7 @@ function LoginPage() {
 function RegisterPage() {
   const auth = useAuth();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ name: "", email: "", password: "", confirm: "", asSeller: true });
+  const [form, setForm] = useState({ name: "", email: "", password: "", confirm: "", zipCode: "", asSeller: true });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -609,7 +622,8 @@ function RegisterPage() {
         name: form.name,
         email: form.email,
         password: form.password,
-        asSeller: form.asSeller
+        asSeller: form.asSeller,
+        ...(form.asSeller ? {} : { zipCode: form.zipCode })
       });
       navigate("/");
     } catch (err) {
@@ -672,6 +686,13 @@ function RegisterPage() {
             minLength={8}
           />
         </div>
+        {!form.asSeller && (
+          <DeliveryCepField
+            value={form.zipCode}
+            onChange={(zipCode) => setForm((current) => ({ ...current, zipCode }))}
+            disabled={saving}
+          />
+        )}
         <fieldset className="role-picker">
           <legend>Como você vai usar a conta?</legend>
           <div className="role-cards">
@@ -694,7 +715,11 @@ function RegisterPage() {
           </div>
         </fieldset>
         {error && <p className="error" role="alert">{error}</p>}
-        <button className="btn wide" type="submit" disabled={saving}>
+        <button
+          className="btn wide"
+          type="submit"
+          disabled={saving || (!form.asSeller && cepDigits(form.zipCode).length !== 8)}
+        >
           {saving ? "Criando conta..." : "Criar conta"}
         </button>
         <p className="auth-switch muted">Já tem conta? <Link to="/login">Entrar</Link></p>
@@ -866,7 +891,7 @@ function SellPage() {
         </label>
       </div>
       <div className="split">
-        <label>CEP
+        <label>CEP de origem
           <input
             value={form.zipCode}
             onChange={(e) => onCepChange(e.target.value)}
@@ -877,7 +902,8 @@ function SellPage() {
             maxLength={9}
           />
           {cepStatus === "loading" && <span className="field-hint">Buscando endereço...</span>}
-          {cepStatus === "ok" && <span className="field-hint">Endereço preenchido pelo CEP.</span>}
+          {cepStatus === "ok" && <span className="field-hint">Endereço de envio preenchido pelo CEP.</span>}
+          {!cepStatus && <span className="field-hint">De onde o produto sai. O CEP de entrega fica na conta.</span>}
           {cepStatus && cepStatus !== "loading" && cepStatus !== "ok" && (
             <span className="field-hint error">{cepStatus}</span>
           )}
@@ -1075,12 +1101,51 @@ function ListingsPage() {
   );
 }
 
+function PixQr({ value }) {
+  const [src, setSrc] = useState("");
+
+  useEffect(() => {
+    if (!value) {
+      setSrc("");
+      return undefined;
+    }
+    let active = true;
+    QRCode.toDataURL(value, {
+      margin: 1,
+      width: 176,
+      errorCorrectionLevel: "M",
+      color: { dark: "#1c1917", light: "#ffffff" }
+    })
+      .then((url) => {
+        if (active) setSrc(url);
+      })
+      .catch(() => {
+        if (active) setSrc("");
+      });
+    return () => {
+      active = false;
+    };
+  }, [value]);
+
+  if (!src) return null;
+  return (
+    <figure className="pix-qr">
+      <img src={src} alt="QR Code PIX" width="176" height="176" />
+      <figcaption className="muted">Aponte a câmera do app do banco</figcaption>
+    </figure>
+  );
+}
+
 function CartPage() {
   const navigate = useNavigate();
   const [cart, setCart] = useState(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
   const [checkingOut, setCheckingOut] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [pixCode, setPixCode] = useState("");
+  const [pixCopied, setPixCopied] = useState(false);
+  const pixTxid = useRef("");
 
   async function hydrate(data) {
     const items = await Promise.all((data.items ?? []).map(async (item) => {
@@ -1094,11 +1159,19 @@ function CartPage() {
     setCart({ ...data, items });
   }
 
+  const items = cart?.items ?? [];
+  const total = items.reduce((sum, item) => sum + Number(item.product?.price ?? 0) * Number(item.quantity ?? 0), 0);
+
   useEffect(() => {
     api("/api/cart")
       .then(hydrate)
       .catch((err) => setError(err.message));
   }, []);
+
+  useEffect(() => {
+    if (!confirming) return;
+    setPixCode(buildPixCopiaECola(total, pixTxid.current));
+  }, [confirming, total]);
 
   async function changeQty(productId, quantity) {
     setBusy(productId);
@@ -1119,10 +1192,21 @@ function CartPage() {
   }
 
   async function checkout() {
+    if (!confirming) {
+      setError("");
+      pixTxid.current = `IT${Date.now().toString(36).toUpperCase()}`;
+      setPixCode(buildPixCopiaECola(total, pixTxid.current));
+      setPixCopied(false);
+      setConfirming(true);
+      return;
+    }
     setError("");
     setCheckingOut(true);
     try {
-      await api("/api/orders", { method: "POST" });
+      await api("/api/orders", {
+        method: "POST",
+        body: JSON.stringify({ paymentMethod: "Pix" })
+      });
       navigate("/orders");
     } catch (err) {
       setError(err.message);
@@ -1131,11 +1215,21 @@ function CartPage() {
     }
   }
 
+  async function copyPix() {
+    if (!pixCode) return;
+    try {
+      await navigator.clipboard.writeText(pixCode);
+      setPixCopied(true);
+    } catch {
+      const field = document.getElementById("pix-copia-cola");
+      field?.select();
+      document.execCommand("copy");
+      setPixCopied(true);
+    }
+  }
+
   if (error && !cart) return <Notice title="Carrinho indisponível">{error}</Notice>;
   if (!cart) return <div className="skeleton" aria-hidden="true" />;
-
-  const items = cart.items ?? [];
-  const total = items.reduce((sum, item) => sum + Number(item.product?.price ?? 0) * Number(item.quantity ?? 0), 0);
 
   return (
     <section>
@@ -1177,11 +1271,53 @@ function CartPage() {
               </li>
             ))}
           </ul>
-          <div className="cart-summary">
+          <div className={`cart-summary ${confirming ? "checkout" : ""}`}>
             <p className="price">{money(total)}</p>
-            <button type="button" className="btn" onClick={checkout} disabled={checkingOut || Boolean(busy)}>
-              {checkingOut ? "Finalizando..." : "Finalizar compra"}
-            </button>
+            {confirming ? (
+              <div className="checkout-pay">
+                <p className="checkout-pay-title">Forma de pagamento</p>
+                <p className="muted">PIX copia e cola. Cole o código no app do seu banco.</p>
+                <div className="pix-copy">
+                  <textarea
+                    id="pix-copia-cola"
+                    readOnly
+                    value={pixCode}
+                    aria-label="Código PIX copia e cola"
+                    onFocus={(event) => event.currentTarget.select()}
+                  />
+                  <PixQr value={pixCode} />
+                </div>
+                <div className="checkout-actions">
+                  <button type="button" className="ghost" disabled={checkingOut || !pixCode} onClick={copyPix}>
+                    {pixCopied ? "Copiado" : "Copiar código"}
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost"
+                    disabled={checkingOut}
+                    onClick={() => {
+                      setConfirming(false);
+                      setPixCopied(false);
+                      setError("");
+                    }}
+                  >
+                    Voltar
+                  </button>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={checkout}
+                    disabled={checkingOut || Boolean(busy)}
+                  >
+                    {checkingOut ? "Confirmando..." : "Confirmar compra"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button type="button" className="btn" onClick={checkout} disabled={checkingOut || Boolean(busy)}>
+                Finalizar compra
+              </button>
+            )}
           </div>
         </>
       ) : (
@@ -1276,6 +1412,7 @@ function OrderCard({ order, perspective }) {
         {perspective === "seller"
           ? `Comprador: ${order.buyerName || "Cliente"} · ${order.buyerEmail || "sem e-mail"}`
           : `Vendedor: ${order.sellerName || "Anunciante"}`}
+        {paymentMethodLabel(order.paymentMethod) ? ` · ${paymentMethodLabel(order.paymentMethod)}` : ""}
       </p>
       {items.length > 0 && (
         <ul className="order-items">

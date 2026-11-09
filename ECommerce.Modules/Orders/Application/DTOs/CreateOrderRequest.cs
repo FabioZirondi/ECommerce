@@ -48,6 +48,11 @@ public sealed class OrderItemResponse
     public int Quantity { get; init; }
 }
 
+public sealed class CheckoutRequest
+{
+    public string PaymentMethod { get; set; } = string.Empty;
+}
+
 public sealed class OrderResponse
 {
     public string Id { get; init; } = string.Empty;
@@ -58,6 +63,7 @@ public sealed class OrderResponse
     public string SellerName { get; init; } = string.Empty;
     public decimal Total { get; init; }
     public string Status { get; init; } = string.Empty;
+    public string? PaymentMethod { get; init; }
     public IReadOnlyList<OrderItemResponse> Items { get; init; } = [];
     public DateTime CreatedAt { get; init; }
 }

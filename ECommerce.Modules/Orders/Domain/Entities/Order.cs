@@ -20,6 +20,10 @@ public sealed class Order
 
     public List<OrderItem> Items { get; set; } = [];
     public decimal Total { get; set; }
+
+    [BsonRepresentation(BsonType.String)]
+    public PaymentMethod PaymentMethod { get; set; }
+
     public OrderStatus Status { get; set; } = OrderStatus.Pending;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? PaidAt { get; set; }

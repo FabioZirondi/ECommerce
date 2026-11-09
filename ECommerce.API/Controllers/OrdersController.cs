@@ -1,4 +1,5 @@
 using ECommerce.API.Extensions;
+using ECommerce.Modules.Orders.Application.DTOs;
 using ECommerce.Modules.Orders.Application.Services;
 using ECommerce.Shared.Extensions;
 using Microsoft.AspNetCore.Authorization;
@@ -35,9 +36,9 @@ public sealed class OrdersController : ControllerBase
 
     [HttpPost]
     [EnableRateLimiting("sensitive")]
-    public async Task<IActionResult> Checkout(CancellationToken cancellationToken)
+    public async Task<IActionResult> Checkout([FromBody] CheckoutRequest? request, CancellationToken cancellationToken)
     {
-        var result = await _orders.CheckoutAsync(User.GetUserId(), cancellationToken);
+        var result = await _orders.CheckoutAsync(User.GetUserId(), request?.PaymentMethod, cancellationToken);
         return result.ToActionResult();
     }
 

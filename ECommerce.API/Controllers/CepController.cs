@@ -19,6 +19,7 @@ public sealed class CepController : ControllerBase
         _cep = cep;
     }
 
+    [AllowAnonymous]
     [HttpGet("{zipCode}")]
     public async Task<IActionResult> Lookup(string zipCode, CancellationToken cancellationToken)
     {

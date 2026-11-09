@@ -13,7 +13,7 @@ public interface IOrderService
     Task<Result<IReadOnlyList<OrderResponse>>> ListMineAsync(string buyerId, CancellationToken cancellationToken = default);
     Task<Result<IReadOnlyList<OrderResponse>>> ListSalesAsync(string sellerId, CancellationToken cancellationToken = default);
     Task<Result<OrderResponse>> GetByIdAsync(string id, string userId, CancellationToken cancellationToken = default);
-    Task<Result<IReadOnlyList<OrderResponse>>> CheckoutAsync(string buyerId, CancellationToken cancellationToken = default);
+    Task<Result<IReadOnlyList<OrderResponse>>> CheckoutAsync(string buyerId, string? paymentMethod, CancellationToken cancellationToken = default);
 }
 
 public sealed class OrderService : IOrderService
@@ -79,8 +79,14 @@ public sealed class OrderService : IOrderService
 
     public async Task<Result<IReadOnlyList<OrderResponse>>> CheckoutAsync(
         string buyerId,
+        string? paymentMethod,
         CancellationToken cancellationToken = default)
     {
+        if (!TryParsePayment(paymentMethod, out var method))
+        {
+            return Result<IReadOnlyList<OrderResponse>>.Failure("Escolha PIX, cartão ou boleto.");
+        }
+
         var buyer = await _users.GetByIdAsync(buyerId, cancellationToken);
         if (buyer is null)
         {
@@ -132,6 +138,7 @@ public sealed class OrderService : IOrderService
                 SellerName = group.First().Product.SellerName,
                 Items = orderItems,
                 Total = orderItems.Sum(item => item.UnitPrice * item.Quantity),
+                PaymentMethod = method,
                 Status = OrderStatus.Paid,
                 PaidAt = DateTime.UtcNow
             });
@@ -218,6 +225,7 @@ public sealed class OrderService : IOrderService
             SellerName = order.SellerName,
             Total = order.Total,
             Status = order.Status == OrderStatus.Paid ? "Purchased" : order.Status.ToString(),
+            PaymentMethod = order.PaymentMethod == default ? null : order.PaymentMethod.ToString(),
             Items = items,
             CreatedAt = order.CreatedAt
         };
@@ -225,4 +233,23 @@ public sealed class OrderService : IOrderService
 
     private static string CoverImage(Product? product)
         => product?.Images.FirstOrDefault(url => !string.IsNullOrWhiteSpace(url)) ?? string.Empty;
+
+    private static bool TryParsePayment(string? value, out PaymentMethod method)
+    {
+        var key = (value ?? string.Empty).Trim().ToLowerInvariant();
+        method = key switch
+        {
+            "pix" => PaymentMethod.Pix,
+            "card" or "cartao" or "cartão" or "credito" or "crédito" => PaymentMethod.Card,
+            "boleto" => PaymentMethod.Boleto,
+            _ => default
+        };
+
+        if (method != default)
+        {
+            return true;
+        }
+
+        return Enum.TryParse(value, ignoreCase: true, out method) && method != default;
+    }
 }

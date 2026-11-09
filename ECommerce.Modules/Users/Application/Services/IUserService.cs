@@ -8,4 +8,8 @@ public interface IUserService
     Task<Result<AuthResponse>> RegisterAsync(CreateUserRequest request, CancellationToken cancellationToken = default);
     Task<Result<AuthResponse>> LoginAsync(LoginRequest request, CancellationToken cancellationToken = default);
     Task<Result<UserResponse>> GetByIdAsync(string id, CancellationToken cancellationToken = default);
+    Task<Result<UserResponse>> UpdateDeliveryAddressAsync(
+        string userId,
+        UpdateAddressRequest request,
+        CancellationToken cancellationToken = default);
 }
